@@ -3,6 +3,6 @@ pandas
 numpy
 tensorflow
 scikit-learn
-matplotlib
 yfinance
 fpdf
+streamlit-autorefresh
