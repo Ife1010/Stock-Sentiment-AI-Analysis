@@ -22,7 +22,7 @@ ticker_dict = {
 selected_display = st.sidebar.selectbox("Choose Asset", list(ticker_dict.keys()))
 ticker = ticker_dict[selected_display]
 
-# 3. Data Engine (Auto-fetch live data)
+# 3. Data Engine
 @st.cache_data(ttl=3600)
 def load_market_data(symbol):
     data = yf.download(symbol, period="2y")
@@ -56,43 +56,46 @@ st.title(f"🚀 {selected_display} Analysis")
 df = load_market_data(ticker)
 
 if df is not None:
-    # Load your trained model
     try:
         model = load_model("stock_model.h5", compile=False)
         current_price = float(df['Close'].iloc[-1])
         
         # --- NEXT CLOSE PREDICTION ---
-        # Using the last 60 days to predict the final close of the current day
         last_60 = df[['Close', 'RSI']].tail(60).values
         scaler = MinMaxScaler()
         scaled_input = scaler.fit_transform(last_60)
         prediction_scaled = model.predict(np.reshape(scaled_input, (1, 60, 2)))
         
-        # Scaling adjustment (denormalization)
+        # Predicted close target for the end of the day
         predicted_close = current_price + (prediction_scaled[0][0] - 0.5) * (current_price * 0.05)
 
         # Display Metrics
         m1, m2, m3 = st.columns(3)
         m1.metric("Current Price", f"${current_price:.2f}")
-        m2.metric("AI Expected Close", f"${predicted_close:.2f}", delta=f"{predicted_close-current_price:.2f}")
+        m2.metric("AI Predicted Close", f"${predicted_close:.2f}", delta=f"{predicted_close-current_price:.2f}")
         m3.metric("RSI Momentum", f"{df['RSI'].iloc[-1]:.2f}")
 
         # Charts
-        st.subheader("Market Convergence Trend")
+        st.subheader("Market Trend (Past 50 Days)")
         st.line_chart(df['Close'].tail(50))
 
-        # --- NEWS FEED (With Safety Fix) ---
+        # --- NEWS FEED (The Safety Fix) ---
         st.divider()
         st.subheader(f"📰 {ticker} Market Intelligence")
         news_items = yf.Ticker(ticker).news[:5]
         
-        for item in news_items:
-            # Use .get() to avoid KeyError if 'title' is missing
-            title = item.get('title', 'Headline Unavailable')
-            link = item.get('link', '#')
-            with st.expander(title):
-                st.write(f"Source: {item.get('publisher', 'Financial News')}")
-                st.write(f"[Read Full Article]({link})")
+        if news_items:
+            for item in news_items:
+                # FIX: Use .get() to safely retrieve keys
+                title = item.get('title', 'Headline Unavailable')
+                link = item.get('link', '#')
+                publisher = item.get('publisher', 'Financial News')
+                
+                with st.expander(title):
+                    st.write(f"Source: {publisher}")
+                    st.write(f"[Read Full Article]({link})")
+        else:
+            st.write("No recent news headlines available.")
 
         # --- PDF DOWNLOAD ---
         pdf_bytes = generate_pdf_report(ticker, current_price, predicted_close)
